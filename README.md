@@ -1,4 +1,6 @@
 # ThreadCraft: Disaster-Recovery-for-AWS-3-Tier-Architecture
+![dr1](https://github.com/user-attachments/assets/d6e918ea-185e-4b7a-a23b-017104abce84)
+
 Overview
 This repository documents ThreadCraft's Disaster Recovery (DR) warm-standby strategy, designed to ensure high availability and data integrity for a critical e-commerce platform. 
 The strategy leverages Amazon Aurora Global Database, AWS Route 53 ARC (Application Recovery Controller), and S3 Cross-Region Replication bi-directional (CRR) to minimize downtime and prevent data loss.the repository contains two VPCs, one for the primary region and one for the disaster recovery region.
