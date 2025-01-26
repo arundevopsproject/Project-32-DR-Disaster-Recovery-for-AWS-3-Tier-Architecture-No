@@ -12,13 +12,6 @@ resource "aws_lb" "alb-tier1" {
   tags = local.common_tags
 }
 
-# Create the association between WAF alb web acl and ALB first tier
-
-#resource "aws_wafv2_web_acl_association" "alb_association" {
-#resource_arn = aws_lb.alb-tier1.arn
-#web_acl_arn  = aws_wafv2_web_acl.alb_web_acl.arn
-#}
-
 # target group ALB
 
 resource "aws_lb_target_group" "first-tiertg" {
