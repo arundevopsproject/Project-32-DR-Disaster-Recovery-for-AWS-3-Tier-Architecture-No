@@ -40,6 +40,7 @@ resource "aws_rds_cluster" "aurora-cluster" {
   db_subnet_group_name      = aws_db_subnet_group.db_subnet_group.name
   vpc_security_group_ids    = [aws_security_group.db-tier3.id]
   global_cluster_identifier = aws_rds_global_cluster.global_aurora.id
+  kms_key_id                = data.aws_kms_key.by_alias_east.arn
 
   lifecycle {
     create_before_destroy = true
@@ -81,6 +82,7 @@ resource "aws_rds_cluster" "recovery-aurora-cluster" {
   global_cluster_identifier      = aws_rds_global_cluster.global_aurora.id
   replication_source_identifier  = aws_rds_cluster.aurora-cluster.arn
   enable_global_write_forwarding = true
+  kms_key_id                     = data.aws_kms_key.by_alias_west.arn
 
   lifecycle {
     create_before_destroy = true
