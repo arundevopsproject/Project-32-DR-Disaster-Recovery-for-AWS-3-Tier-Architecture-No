@@ -288,7 +288,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "thread_craft_west" {
 resource "aws_s3_object" "west_object" {
   bucket       = aws_s3_bucket.thread_craft_west.id
   provider     = aws.backup
-  key          = "catalog/ndex.html"
+  key          = "catalog/index.html"
   content_type = "text/html"
   source       = "C:/Users/Irina/Downloads/currently 3 tier and backup/files/catalog/index.html"
 }
@@ -311,7 +311,12 @@ data "aws_iam_policy_document" "recov_bucket_policy" {
 
     principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${var.account_id}:role/recov_ec2_role"]
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceVpc"
+      values   = [aws_vpc.recovery_site_vpc.id]
     }
   }
 }
