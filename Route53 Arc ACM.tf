@@ -1,5 +1,5 @@
 # The ACM certificate, Route 53 hosted zone were created in the console and referenced in Terraform as data sources.
-# Please take care of ARC - Application Recovery Controller, as it is an expensive resource
+# Please be cautios with ARC - Application Recovery Controller, as it is an expensive resource
 # and should be deployed after you make sure the orther resources work smoothly.
 # I will comment it out.
 
