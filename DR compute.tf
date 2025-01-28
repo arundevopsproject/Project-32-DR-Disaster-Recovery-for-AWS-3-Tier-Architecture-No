@@ -1,6 +1,35 @@
+/*
 data "aws_ssm_parameter" "amzn2_linux" {
-  name     = "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
-  provider = aws.backup
+  name = "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+  provider          = aws.backup
+}
+*/
+
+# Create custom AMI and reference them as data source
+# create custom Ami for tier 1
+data "aws_ami" "apache_ami2" {
+  provider    = aws.backup
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = [var.custom_ami2]
+  }
+
+  owners = [var.account_id]
+}
+
+# create custom Ami for tier 2, with Apache and SQL server installed
+data "aws_ami" "mysql_ami2" {
+  provider    = aws.backup
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = [var.sql_ami2]
+  }
+
+  owners = [var.account_id]
 }
 
 # Ec2 policy
@@ -124,15 +153,11 @@ resource "aws_autoscaling_group" "recov_asg-tier1" {
 resource "aws_launch_template" "recov_thread-web" {
   provider               = aws.backup
   name_prefix            = "recov-thread-web"
-  image_id               = data.aws_ssm_parameter.amzn2_linux.value
+  image_id               = data.aws_ami.apache_ami2.id
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.recovery_ec2-tier1.id]
   user_data = base64encode(<<EOF
 #!/bin/bash
-yum update -y
-yum install -y httpd
-systemctl start httpd
-systemctl enable httpd
 
 aws s3 cp s3://${aws_s3_bucket.thread_craft_west.id}/index.html /var/www/html/index.html
 
@@ -195,15 +220,11 @@ resource "aws_autoscaling_group" "recov_asg-tier2" {
 resource "aws_launch_template" "recov_thread-app" {
   provider               = aws.backup
   name_prefix            = "recov-thread-app"
-  image_id               = data.aws_ssm_parameter.amzn2_linux.value
+  image_id               = data.aws_ami.mysql_ami2.id
   instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.recovery_ec2-tier2.id]
   user_data = base64encode(<<EOF
 #!/bin/bash
-yum update -y
-yum install -y httpd
-systemctl start httpd
-systemctl enable httpd
 
 aws s3 cp s3://${aws_s3_bucket.thread_craft_west.id}/index.html /var/www/html/index.html
 
