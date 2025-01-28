@@ -1,3 +1,8 @@
+# The ACM certificate, Route 53 hosted zone were created in the console and referenced in Terraform as data sources.
+# Please take care of ARC - Application Recovery Controller, as it is an expensive resource
+# and should be deployed after you make sure the orther resources work smoothly.
+# I will comment it out.
+
 data "aws_acm_certificate" "thread_cert" {
   domain      = "threadcraft.link"
   types       = ["AMAZON_ISSUED"]
@@ -36,7 +41,7 @@ resource "aws_route53_record" "primary_alb_alias" {
     type = "PRIMARY"
   }
 
-  health_check_id = aws_route53_health_check.primary_health_check.id
+  #health_check_id = aws_route53_health_check.primary_health_check.id
 
 }
 
@@ -58,7 +63,7 @@ resource "aws_route53_record" "secondary_alb_alias" {
     type = "SECONDARY"
   }
 
-  health_check_id = aws_route53_health_check.secondary_health_check.id
+  #health_check_id = aws_route53_health_check.secondary_health_check.id
 }
 
 
@@ -67,7 +72,7 @@ resource "aws_route53_record" "secondary_alb_alias" {
 # Route 53 ARC Configuration
 
 
-
+/*
 resource "aws_route53recoveryreadiness_recovery_group" "thread_recovery_group" {
   recovery_group_name = "thread-recovery-group"
   cells = [
@@ -160,6 +165,7 @@ resource "aws_route53_health_check" "secondary_health_check" {
   invert_healthcheck  = false
 }
 
+*/
 
 # health checks for failover
 resource "aws_route53_health_check" "alb_primary_health_check" {
