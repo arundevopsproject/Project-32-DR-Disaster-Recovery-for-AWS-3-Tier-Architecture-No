@@ -1,3 +1,5 @@
+#
+
 # aws_lb tier 1 
 
 resource "aws_lb" "alb-tier1" {
@@ -114,6 +116,8 @@ resource "aws_lb_listener" "second-tierlsn" {
 }
 */
 
+# Since the VPC doesn't have access to Internet, I used custom AMI, which were created separatdly
+# which was created separately and referenced as a data source using a filter. 
 
 data "aws_ami" "apache_ami" {
   most_recent = true
