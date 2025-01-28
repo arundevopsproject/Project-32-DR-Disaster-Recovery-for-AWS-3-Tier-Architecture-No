@@ -200,3 +200,14 @@ variable "bucket_name_west" {
   default     = "thread-craft-replication-"
 }
 
+variable "custom_ami2" {
+  type        = string
+  description = "Custom AMI to launch Apache web server"
+  default     = "Apache2"
+}
+
+variable "sql_ami2" {
+  type        = string
+  description = "Custom AMI to launch sql server"
+  default     = "sql2"
+}
