@@ -1,0 +1,169 @@
+# Create WAF Web ACL for the primary ALB
+resource "aws_wafv2_web_acl" "primary" {
+  name        = "alb-web-acl"
+  description = "ALB web ACL"
+  scope       = "REGIONAL"
+
+  default_action {
+    block {}
+  }
+
+  # Allow only specific IP ranges
+  rule {
+    name     = "AllowSpecificIPs"
+    priority = 0
+
+    action {
+      allow {}
+    }
+
+    statement {
+      ip_set_reference_statement {
+        arn = aws_wafv2_ip_set.myip.arn
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "AllowSpecificIPsRule"
+      sampled_requests_enabled   = true
+    }
+  }
+
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 1
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "CRSRule"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "ALBwebACL"
+    sampled_requests_enabled   = true
+  }
+
+}
+
+resource "aws_wafv2_ip_set" "myip" {
+  name        = "allowed-ips"
+  description = "Only my IP and Route 53 health checks are allowed"
+  scope       = "REGIONAL"
+  ip_address_version = "IPV4"
+
+  addresses = concat (
+  ["/32"],
+  data.aws_ip_ranges.route53_healthchecks.cidr_blocks
+  )
+    
+}
+
+# Create the association between WAF alb web acl and ALB first tier
+
+resource "aws_wafv2_web_acl_association" "primary" {
+resource_arn = aws_lb.alb-tier1.arn
+web_acl_arn  = aws_wafv2_web_acl.primary.arn
+}
+
+###################################################################
+
+# Create WAF Web ACL for the secondary ALB
+resource "aws_wafv2_web_acl" "secondary" {
+  name        = "alb-web-acl"
+  description = "ALB web ACL"
+  scope       = "REGIONAL"
+  provider    = aws.backup
+
+  default_action {
+    block {}
+  }
+
+  # Allow only specific IP ranges - my IP
+  rule {
+    name     = "AllowSpecificIPs"
+    priority = 0
+
+    action {
+      allow {}
+    }
+
+    statement {
+      ip_set_reference_statement {
+        arn = aws_wafv2_ip_set.myip2.arn
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "AllowSpecificIPsRule"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 1
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "CRSRule"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "ALBwebACL"
+    sampled_requests_enabled   = true
+  }
+
+}
+
+resource "aws_wafv2_ip_set" "myip2" {
+  name        = "allowed-ips"
+  description = "Only my IP and Route 53 health checks are allowed"
+  scope       = "REGIONAL"
+  ip_address_version = "IPV4"
+  provider      = aws.backup
+
+  addresses = concat (
+  ["/32"],
+  data.aws_ip_ranges.route53_healthchecks.cidr_blocks
+  )
+    
+}
+
+# Create the association between WAF alb web acl and ALB first tier
+
+resource "aws_wafv2_web_acl_association" "secondary" {
+provider = aws.backup
+resource_arn = aws_lb.recov_alb-tier1.arn
+web_acl_arn  = aws_wafv2_web_acl.secondary.arn
+}
