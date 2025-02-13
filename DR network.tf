@@ -47,32 +47,7 @@ resource "aws_route_table" "recovery_three-tier-rt-public" {
 resource "aws_route_table" "recovery_three-tier-rt" {
   vpc_id   = aws_vpc.recovery_site_vpc.id
   provider = aws.backup
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_nat_gateway.recov_nat_gw.id
-  }
-
-  tags = local.recovery_tags
-
-  depends_on = [aws_internet_gateway.recovery_gw]
-
 }
-
-resource "aws_nat_gateway" "recov_nat_gw" {
-  allocation_id = aws_eip.nat_eip.id
-  subnet_id     = aws_subnet.recovery_public_subnet1.id
-  provider      = aws.backup
-
-  tags = {
-    Name = "NAT-Gateway"
-  }
-}
-# Allocate an Elastic IP for the NAT Gateway
-resource "aws_eip" "nat_eip" {
-  domain   = "vpc"
-  provider = aws.backup
-}
-
 
 # Define public subnet Tier 1 - ALB
 
@@ -293,12 +268,26 @@ resource "aws_vpc_endpoint" "recovery_ssmmessages" {
   tags = local.recovery_tags
 }
 
+# VPC Interface endpoint for STS
+
+resource "aws_vpc_endpoint" "recovery_sts" {
+  vpc_id              = aws_vpc.recovery_site_vpc.id
+  provider            = aws.backup
+  service_name        = "com.amazonaws.us-west-1.sts"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [aws_subnet.recovery_private_subnet1.id, aws_subnet.recovery_private_subnet2.id]
+  security_group_ids  = [aws_security_group.recovery_endpoint-sg.id]
+  private_dns_enabled = true
+
+  tags = local.recovery_tags
+}
+
 
 ##################################################################################
 
 # Security groups
 
-# Security group for SSM VPC endpoint
+# Security group for SSM and STS VPC endpoint
 
 resource "aws_security_group" "recovery_endpoint-sg" {
   name        = "recovery_endpoint-sg"
@@ -380,19 +369,33 @@ data "aws_prefix_list" "s3_prefix_recov" {
 
 resource "aws_security_group" "recovery_alb-tier1" {
   name        = "alb1-sg"
-  description = "Security group for ALB web servers"
+  description = "Security group for ALB web servers allowing my IP and Route 53 healthchecks"
   vpc_id      = aws_vpc.recovery_site_vpc.id
   provider    = aws.backup
 
-  # Inbound traffic from Route53
+  # Inbound traffic from external sources
   ingress {
-    from_port = 443
-    to_port   = 443
-    protocol  = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = data.aws_ip_ranges.route53_healthchecks.cidr_blocks
   }
 
-  # outbound to Route 53
+  # Allow my IP on port 443
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]
+  }
+  
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = [var.recovery_cidr_block]
+  }
+
   egress {
     from_port   = 443
     to_port     = 443
