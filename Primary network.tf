@@ -304,33 +304,38 @@ data "aws_prefix_list" "s3_prefix" {
 
 # Security group ALB tier 1
 
-data "aws_ec2_managed_prefix_list" "cloudfront" {
-  filter {
-    name   = "prefix-list-name"
-    values = ["com.amazonaws.global.cloudfront.origin-facing"]
-  }
-}
-
 resource "aws_security_group" "alb-tier1" {
   name        = "alb1-sg"
-  description = "Security group for ALB web servers"
+  description = "Security group for ALB web servers allowing my IP and Route 53 healthchecks"
   vpc_id      = aws_vpc.my_site_vpc.id
 
   # Inbound traffic from external sources
   ingress {
-    from_port = 443
-    to_port   = 443
-    protocol  = "tcp"
-    #prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = data.aws_ip_ranges.route53_healthchecks.cidr_blocks
   }
 
-  # outbound to CloudFront
+  # Allow my IP on port 443
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr_block]
+  }
+
   egress {
-    from_port = 443
-    to_port   = 443
-    protocol  = "tcp"
-    #prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -340,9 +345,8 @@ resource "aws_security_group" "alb-tier1" {
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr_block]
   }
-
-  tags = local.common_tags
 }
+
 
 ##########################################################################
 
