@@ -1,0 +1,293 @@
+# Use existing organization
+
+# Organization
+data "aws_organizations_organization" "main" {}
+
+# Organizational Units
+data "aws_organizations_organizational_unit" "production" {
+  name = "Production"
+  parent_id = var.prod_ou
+}
+
+data "aws_organizations_organizational_unit" "backup" {
+  name = "Backup"
+  parent_id = var.backup_ou
+}
+
+
+# AWS Accounts
+data "aws_organizations_account" "cross" {
+  account_id = var.crossaccount_id
+}
+
+data "aws_organizations_account" "prod" {
+  account_id = var.account_id
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+# Create a unified SCP 
+resource "aws_organizations_policy" "unified_scp" {
+  name        = "UnifiedSecurityGuardrails"
+  description = "Combined Service Control Policy for critical security protections."
+  type        = "SERVICE_CONTROL_POLICY"
+  content     = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyCloudTrailDelete",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:DeleteTrail",
+        "cloudtrail:StopLogging"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RestrictRegions",
+      "Effect": "Deny",
+      "Action": "*",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:RequestedRegion": ["us-east-1", "us-west-1"]
+        }
+      }
+    },
+    {
+      "Sid": "DenyNetworkChanges",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:AttachInternetGateway",
+        "ec2:CreateInternetGateway",
+        "ec2:CreateEgressOnlyInternetGateway",
+        "ec2:CreateVpcPeeringConnection",
+        "ec2:AcceptVpcPeeringConnection",
+        "globalaccelerator:Create*",
+        "globalaccelerator:Update*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ProtectGuardDuty",
+      "Effect": "Deny",
+      "Action": [
+        "guardduty:AcceptInvitation",
+        "guardduty:ArchiveFindings",
+        "guardduty:CreateDetector",
+        "guardduty:CreateFilter",
+        "guardduty:CreateIPSet",
+        "guardduty:CreateMembers",
+        "guardduty:CreatePublishingDestination",
+        "guardduty:CreateSampleFindings",
+        "guardduty:CreateThreatIntelSet",
+        "guardduty:DeclineInvitations",
+        "guardduty:DeleteDetector",
+        "guardduty:DeleteFilter",
+        "guardduty:DeleteInvitations",
+        "guardduty:DeleteIPSet",
+        "guardduty:DeleteMembers",
+        "guardduty:DeletePublishingDestination",
+        "guardduty:DeleteThreatIntelSet",
+        "guardduty:DisassociateFromMasterAccount",
+        "guardduty:DisassociateMembers",
+        "guardduty:InviteMembers",
+        "guardduty:StartMonitoringMembers",
+        "guardduty:StopMonitoringMembers",
+        "guardduty:TagResource",
+        "guardduty:UnarchiveFindings",
+        "guardduty:UntagResource",
+        "guardduty:UpdateDetector",
+        "guardduty:UpdateFilter",
+        "guardduty:UpdateFindingsFeedback",
+        "guardduty:UpdateIPSet",
+        "guardduty:UpdatePublishingDestination",
+        "guardduty:UpdateThreatIntelSet"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ProtectRoute53RoutingControls",
+      "Effect": "Deny",
+      "Action": [
+        "route53-recovery-cluster:UpdateRoutingControlState",
+        "route53-recovery-cluster:UpdateRoutingControlStates"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalARN": [
+            "arn:aws:iam::*:role/Role1AllowedToBypassThisSCP",
+            "arn:aws:iam::*:role/Role2AllowedToBypassThisSCP"
+          ]
+        }
+      }
+    }
+  ]
+}
+POLICY
+}
+
+# Attach Unified SCP to the entire Organization (Root)
+resource "aws_organizations_policy_attachment" "attach_unified_scp" {
+  policy_id = aws_organizations_policy.unified_scp.id
+  target_id = data.aws_organizations_organization.main.roots[0].id
+}
+
+
+# Unified Resource Control Policy
+resource "aws_organizations_policy" "unified_rcp" {
+  name        = "UnifiedResourceControlPolicy"
+  description = "Combined Resource Control Policy for critical security protections."
+  type        = "RESOURCE_CONTROL_POLICY"
+  content     = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyUntrustedAssumeRole",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "sts:AssumeRole",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "aws:PrincipalOrgID": ""${var.org_id}"",
+          "aws:PrincipalAccount": [
+            "<third-party-account-a>",
+            "<third-party-account-b>"
+          ]
+        },
+        "BoolIfExists": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      }
+    },
+    {
+      "Sid": "ConfusedDeputyProtection",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:*",
+        "sqs:*",
+        "kms:*",
+        "secretsmanager:*",
+        "sts:*"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "aws:SourceOrgID": "${var.org_id}",
+          "aws:SourceAccount": [
+            "third-party-account-a",
+            "third-party-account-b"
+          ]
+        },
+        "Bool": {
+          "aws:PrincipalIsAWSService": "true"
+        },
+        "Null": {
+          "aws:SourceArn": "false"
+        }
+      }
+    },
+    {
+      "Sid": "ProtectCriticalS3Bucket",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:DeleteBucket",
+        "s3:DeleteBucketPolicy",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:DeleteObjectTagging",
+        "s3:DeleteObjectVersionTagging"
+      ],
+      "Resource": [
+        "${aws_s3_bucket.thread-bucket.arn}",
+        "${aws_s3_bucket.thread-bucket.arn}/*"
+      ]
+    },
+    {
+      "Sid": "DenyPublicWebIdentityAssumeRole",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:federatedProvider": [
+            "accounts.google.com",
+            "graph.facebook.com",
+            "www.amazon.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ProtectKMSResources",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "kms:ScheduleKeyDeletion",
+        "kms:DeleteAlias",
+        "kms:DeleteCustomKeyStore",
+        "kms:DeleteImportedKeyMaterial"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::${var.account_id}:role/[PRIVILEGED_ROLE]"
+        }
+      }
+    }
+
+  ]
+}
+POLICY
+}
+
+# Attach Unified RCP to the Organization Root
+resource "aws_organizations_policy_attachment" "attach_unified_rcp" {
+  policy_id = aws_organizations_policy.unified_rcp.id
+  target_id = data.aws_organizations_organization.main.roots[0].id
+}
+
+
+
+/*
+# Use the below code to create a new AWS Organization, OU units and accounts
+# Create AWS Organization
+resource "aws_organizations_organization" "main" {
+  feature_set = "ALL"
+}
+
+# Create Organization Unit (OU) Structure
+resource "aws_organizations_organizational_unit" "production" {
+  name      = "Production"
+  parent_id = aws_organizations_organization.main.roots[0].id
+}
+
+resource "aws_organizations_organizational_unit" "backup" {
+  name      = "Backup"
+  parent_id = aws_organizations_organization.main.roots[0].id
+}
+
+# Create AWS Accounts
+resource "aws_organizations_account" "prod_acct" {
+  email             = "<yourEmail>"                                   
+  name              = "Production"                                         
+  close_on_deletion = false                                           
+  parent_id         = aws_organizations_organizational_unit.production.id 
+}
+
+resource "aws_organizations_account" "backup_acct" {
+  email             = "yourEmail"
+  name              = "Backup"
+  close_on_deletion = false
+  parent_id         = aws_organizations_organizational_unit.backup.id
+}
+*/
