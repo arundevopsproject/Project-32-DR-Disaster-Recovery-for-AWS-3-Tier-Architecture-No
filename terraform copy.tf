@@ -19,4 +19,5 @@ provider "aws" {
   alias   = "backup"
   profile = ""
   region  = var.aws_secondary_region
+  sts_region = "eu-west-1"
 }
